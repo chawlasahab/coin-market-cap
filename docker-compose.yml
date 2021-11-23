@@ -1,0 +1,27 @@
+version: "3"
+services:
+  influxdb:
+    image: influxdb:1.8
+    ports:
+      - "8086:8086"
+    volumes:
+      - influxdb:/var/lib/influxdb
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: app:latest
+    links:
+      - influxdb
+  grafana:
+    image: grafana/grafana:latest
+    links:
+      - app
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana:/var/lib/grafana
+
+volumes:
+  influxdb:
+  grafana:
