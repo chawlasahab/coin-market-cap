@@ -87,7 +87,7 @@ def capture():
     }
     headers = {
         'Accepts': 'application/json',
-        'X-CMC_PRO_API_KEY': '4b75ed5d-bce2-4578-bb5e-ae9e089df2f8',
+        'X-CMC_PRO_API_KEY': 'PASTE YOUR API KEY HERE',
     }
     session = Session()
     session.headers.update(headers)
