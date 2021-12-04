@@ -1,19 +1,16 @@
-from functools import update_wrapper
-import pprint
-import requests
 from influxdb import InfluxDBClient
+import requests
+import pandas as pd
 from requests import Session
 from requests.exceptions import ConnectionError, Timeout, TooManyRedirects
 import json
-import datetime
 import time
 import sys
 
-
 client = None
 dbname = 'mydb'
-measurment = 'crypto_price'
-
+measurment = 'top5currencies'
+DATA_5M = []
 
 def db_exists():
     '''returns True if the database exists'''
@@ -55,86 +52,54 @@ def connect_db(host, port, reset):
     client.switch_database(dbname)
 
 
-def get_entries():
-    '''returns all entries in the database.'''
-    results = client.query('select * from {}'.format(measurment))
-    return results
+def push(data):
+    '''push data in measurement: metrics to visualize on grafana'''
+    client.drop_measurement(measurment)
+    for e in data:
+        metrics_data = [{
+            "measurement": measurment,
+            "fields": {
+                "name": e[0],
+                "price": e[1]
+            }
+        }]
+        client.write_points(metrics_data)
 
 
-def remove():
-    '''delete any data which is older than 5 minutes from currennt time.'''
-    client.query(
-      'delete from {} where time < now() - 5m'.format(measurment)
-    )
+def calculate(data):
+    result = []
+    for r1, c1 in data[0].iterrows():
+        for r2, c2 in data[4].iterrows():
+            if c1[0] == c2[0]:
+                price_diff = abs(c1[2] - c2[2])
+                result.append([c1[1], c2[2], price_diff])
+    result.sort(key=lambda x: x[2], reverse=True)
+    return result[0:5]
 
 
 def capture():
-    '''insert data into database at an interval of 60 secs'''
-    #TIME_5_MINS_AGO = int(datetime.datetime.now().timestamp()) - 360
+    currency_data = []
     url = 'https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest'
     parameters = {
-      'start': '1',
-      'limit': '200',
-      'convert': 'USD',
+        'start': '1',
+        'limit': '200',
+        'convert': 'USD',
     }
     headers = {
-      'Accepts': 'application/json',
-      'X-CMC_PRO_API_KEY': 'Your API KEY',
+        'Accepts': 'application/json',
+        'X-CMC_PRO_API_KEY': '4b75ed5d-bce2-4578-bb5e-ae9e089df2f8',
     }
     session = Session()
     session.headers.update(headers)
     try:
         response = session.get(url, params=parameters)
         data = json.loads(response.text)
-        remove()
         for currency in data["data"]:
-            currency_data = [{
-              "measurement": "crypto_price",
-              "fields": {
-                "id": currency["id"],
-                "name": currency["name"],
-                "price": currency["quote"]["USD"]["price"],
-              }
-            }]
-            client.write_points(currency_data)
+            currency_data.append([currency["id"], currency["name"], currency["quote"]["USD"]["price"]])
     except (ConnectionError, Timeout, TooManyRedirects) as e:
         print(e)
-    client.query('drop measurement metrics')
-    push()
-    time.sleep(60)
-
-
-def push():
-    '''push data in measurement: metrics to visualize on grafana'''
-    output = []
-    results_5m = client.query(
-      'select *::field from {} where time >= now() - 5m and time < now() - 4m '.format(
-        measurment
-      )
-    )
-    results_now = client.query(
-      'select *::field from {} where time <= now() and time > now() - 60s'.format(
-        measurment
-      )
-    )
-    r1 = list(results_5m.get_points())
-    r2 = list(results_now.get_points())
-    for e1 in r1:
-        for e2 in r2:
-            if e2['id'] == e1['id']:
-                output.append(
-                  [abs(e1['price']-e2['price']), e1['name'], e2['price']]
-                )
-    output.sort(key=lambda x: x[0], reverse=True)
-    for element in output[:5]:
-        metrics_data = [{
-            "measurement": "metrics",
-            "fields": {
-                "name": element[1],
-                "price": element[2]
-            }
-        }]
-        client.write_points(metrics_data)
+    df = pd.DataFrame(currency_data)
+    return df.sort_values(by=[0])
 
 
 if __name__ == '__main__':
@@ -160,5 +125,12 @@ if __name__ == '__main__':
         sys.exit(1)
     host, port = args
     connect_db(host, port, options.reset)
+
     while True:
-        capture()
+        temp = capture()
+        DATA_5M.append(temp)
+        if len(DATA_5M) == 5:
+            metrics_data = calculate(DATA_5M)
+            push(metrics_data)
+            DATA_5M = DATA_5M[1:]
+        time.sleep(60)
