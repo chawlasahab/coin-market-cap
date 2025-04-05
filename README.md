@@ -21,14 +21,28 @@ INFLUXDB_DB=mydb
 ## 🚀 Run the Application
 
 ```bash
-# Build and start all services
-docker compose up -d
+# Start the full stack
+make up
 
 # Stop the application
-docker compose down
+make down
+
+# View logs (all containers)
+make logs
+
+# View logs from app only
+make logs-app
+
+# View logs from Grafana only
+make logs-grafana
+
+# Rebuild and restart everything
+make restart
 ```
 
-> Make sure Docker is running, and you are in the root of the project (where `docker-compose.yml` is located).
+> You can also use `make help` to view all available commands.
+
+Make sure Docker is running, and you are in the root of the project (where `Makefile` and `docker-compose.yml` are located).
 
 ---
 
@@ -38,7 +52,7 @@ docker compose down
 .
 ├── .env                    # Contains API key and InfluxDB config
 ├── docker-compose.yml      # Defines InfluxDB, Grafana, and app services
-├── Makefile                # (Optional) CLI helper commands
+├── Makefile                # CLI helper commands
 ├── app/
 │   ├── app.py              # Python script to fetch and store crypto data
 │   ├── Dockerfile          # Dockerfile for the app
@@ -98,7 +112,7 @@ SELECT "price" FROM "top5currencies"
 
 - To watch logs:
   ```bash
-  docker compose logs -f app
+  make logs
   ```
 
 ---
